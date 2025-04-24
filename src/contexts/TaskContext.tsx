@@ -44,13 +44,14 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({
     async (taskData: Partial<Task>) => {
       const newTask: Task = {
         id: uuid(),
-        icon: taskData.icon || 'equal',
         title: taskData.title || 'New Task',
         description: taskData.description,
         reminders: taskData.reminders || [],
         scheduledAt: taskData.scheduledAt,
         completed: false,
         tags: taskData.tags || [],
+        isTask: true,
+        isAllDay: true,
       }
 
       const updatedTasks = [...tasks, newTask]

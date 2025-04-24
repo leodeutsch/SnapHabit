@@ -1,25 +1,68 @@
-export function formatRelativeDate(dateISOString: string | undefined): string {
+/**
+ * Parse a date string, handling all-day events correctly
+ * Avoids timezone issues when parsing YYYY-MM-DD strings
+ */
+export function parseScheduledDate(
+  dateString: string,
+  isAllDay?: boolean,
+): Date {
+  // Handle all-day dates (YYYY-MM-DD format)
+  if ((isAllDay || !dateString.includes('T')) && dateString.length === 10) {
+    return new Date(
+      parseInt(dateString.slice(0, 4), 10),
+      parseInt(dateString.slice(5, 7), 10) - 1,
+      parseInt(dateString.slice(8, 10), 10),
+    )
+  }
+
+  // Handle timed events (ISO strings)
+  return new Date(dateString)
+}
+
+/**
+ * Format a date as a YYYY-MM-DD string for all-day events
+ */
+export function formatDateYMD(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function formatRelativeDate(
+  dateISOString: string | undefined,
+  isAllDay?: boolean,
+): string {
   if (!dateISOString) {
     return 'Add due date'
   }
 
   try {
-    // Create Date objects for comparison
-    const taskDateTime = new Date(dateISOString)
+    // Use the safe parsing function
+    const taskDateTime = parseScheduledDate(dateISOString, isAllDay)
 
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
 
-    // Calculate difference in days
-    const diffTime = taskDateTime.getTime() - today.getTime()
+    // For date comparison, we want to compare dates without time
+    const scheduledDay = new Date(
+      taskDateTime.getFullYear(),
+      taskDateTime.getMonth(),
+      taskDateTime.getDate(),
+    )
+
+    // Calculate difference in days correctly
+    const diffTime = scheduledDay.getTime() - today.getTime()
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
 
     // Format based on difference
     if (diffDays < 0) {
       return 'Overdue'
     } else if (diffDays === 0) {
+      // For today with time, show the time
+      if (!isAllDay && dateISOString.includes('T')) {
+        return `Today at ${formatISOToTime(dateISOString)}`
+      }
       return 'Today'
     } else if (diffDays === 1) {
       return 'Tomorrow'
@@ -55,17 +98,23 @@ export function formatISOToTime(isoString: string): string {
 
 export function parseRelativeDate(text: string): Date {
   const today = new Date()
+  const result = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  )
+
   switch (text.toLowerCase()) {
     case 'today':
-      return today
+      return result
     case 'tomorrow':
-      today.setDate(today.getDate() + 1)
-      return today
+      result.setDate(result.getDate() + 1)
+      return result
     case 'next week':
-      today.setDate(today.getDate() + 7)
-      return today
+      result.setDate(result.getDate() + 7)
+      return result
     default:
-      return today
+      return result
   }
 }
 

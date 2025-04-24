@@ -1,6 +1,13 @@
-import { MaterialIcons } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { ChevronDown, Moon, MoonStar, Sun, SunMoon } from 'lucide-react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import {
+  ChevronDown,
+  Moon,
+  MoonStar,
+  RotateCcw,
+  Sun,
+  SunMoon,
+} from 'lucide-react-native'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
@@ -13,7 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
-import { Card, SegmentedButtons } from 'react-native-paper'
+import { Card, ProgressBar, SegmentedButtons } from 'react-native-paper'
 import { Easing } from 'react-native-reanimated'
 import { ColorSwatch } from '../../components/ColorSwatch'
 import { MySwitch } from '../../components/MySwitch'
@@ -37,13 +44,16 @@ if (Platform.OS === 'android') {
 // Predefined color options
 const COLOR_OPTIONS = [
   '#4750c8', // Default blue
-  '#8B5CF6', // Purple
-  '#EC4899', // Pink
-  '#EF4444', // Red
-  '#F59E0B', // Amber
-  '#10B981', // Emerald
-  '#3B82F6', // Blue
   '#6366F1', // Indigo
+  '#74c7ec', // Saphire
+  '#94e2d5', // Teal
+  '#b4befe', // Lavender
+  '#cba6f7', // Mauve
+  '#f5c2e7', // Pink
+  '#EF4444', // Red
+  '#fab387', // Peach
+  '#a6e3a1', // Green
+  '#10B981', // Emerald
 ]
 
 const ACCENT_COLOR_KEY = '@accent_color'
@@ -62,13 +72,29 @@ export const SettingsScreen = () => {
 
   const { width } = useWindowDimensions()
   const [statistics, setStatistics] = useState<Statistics | null>(null)
-  const [accentColor, setAccentColor] = useState('#4750c8') // Default color
+  const [accentColor, setAccentColor] = useState('#4750c8')
   const [isChangingTheme, setIsChangingTheme] = useState(false)
   const [isColorsVisible, setIsColorsVisible] = useState(false)
+  const [progress, setProgress] = useState(0)
 
   const heightAnimation = useRef(new Animated.Value(0)).current
   const rotateAnimation = useRef(new Animated.Value(0)).current
   const darkModeExpansion = useRef(new Animated.Value(0)).current
+  const progressAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    progressAnim.addListener(({ value }) => setProgress(value))
+
+    Animated.timing(progressAnim, {
+      toValue: statistics?.completionRate || 0,
+      duration: 2000,
+      useNativeDriver: false,
+    }).start()
+
+    return () => {
+      progressAnim.removeAllListeners()
+    }
+  }, [])
 
   const isDarkMode = colorScheme === 'dark'
 
@@ -80,24 +106,13 @@ export const SettingsScreen = () => {
 
   // Function to toggle colors with animation
   const toggleColorsVisible = () => {
-    // Calculate the proper height for the color grid
-    // 2 rows of 4 colors with proper spacing
-    const colorSwatchSize = 40 // Size of each color swatch
-    const colorSwatchMargin = 8 // Margin between swatches
-    const containerHeight =
-      Math.ceil(COLOR_OPTIONS.length / 4) *
-        (colorSwatchSize + colorSwatchMargin * 2) +
-      16
-
-    // Set the new state first
     setIsColorsVisible(!isColorsVisible)
 
-    // Then animate to the appropriate height
     Animated.parallel([
       Animated.timing(heightAnimation, {
-        toValue: !isColorsVisible ? containerHeight : 0,
+        toValue: !isColorsVisible ? 64 : 0,
         duration: 300,
-        useNativeDriver: false, // Height can't use native driver
+        useNativeDriver: false,
         easing: Easing.inOut(Easing.ease),
       }),
       Animated.timing(rotateAnimation, {
@@ -177,7 +192,6 @@ export const SettingsScreen = () => {
   }, [isDarkMode])
 
   useEffect(() => {
-    // Don't reset the theme mode on component mount - use the current state instead
     loadStatistics()
   }, [])
 
@@ -228,7 +242,6 @@ export const SettingsScreen = () => {
           />
         )
       default:
-        // Default icon or fallback
         return 'circle'
     }
   }
@@ -249,8 +262,7 @@ export const SettingsScreen = () => {
                 onPress={handleResetStatistics}
                 style={styles.resetButton}
               >
-                <MaterialIcons
-                  name="loop"
+                <RotateCcw
                   size={24}
                   color={theme.colors.primary}
                 />
@@ -262,11 +274,13 @@ export const SettingsScreen = () => {
               Created tasks: {statistics?.habitsCreated}
             </Text>
             <Text style={styles.infoText}>
-              Concluded tasks: {statistics?.habitsCompleted || 0}
-            </Text>
-            <Text style={styles.infoText}>
               Done rate: {statistics?.completionRate?.toFixed(2) || 0}%
             </Text>
+            <ProgressBar
+              progress={progress}
+              color={theme.colors.primary}
+              // style={styles.progressBar}
+            />
           </Card.Content>
         </Card>
 
@@ -369,13 +383,10 @@ export const SettingsScreen = () => {
                 },
               ]}
             >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  justifyContent: 'space-between',
-                  paddingVertical: 8,
-                }}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ paddingVertical: 8 }}
               >
                 {COLOR_OPTIONS.map((color) => (
                   <ColorSwatch
@@ -387,7 +398,7 @@ export const SettingsScreen = () => {
                     opacity={isChangingTheme ? 0.6 : 1}
                   />
                 ))}
-              </View>
+              </ScrollView>
             </Animated.View>
           </Card.Content>
         </Card>
@@ -403,6 +414,20 @@ export const SettingsScreen = () => {
           </Card.Content>
         </Card>
       </ScrollView>
+      <LinearGradient
+        colors={['transparent', theme.colors.background]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.3 }}
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 80,
+          zIndex: 5,
+        }}
+        pointerEvents="none"
+      />
     </View>
   )
 }

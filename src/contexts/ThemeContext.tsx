@@ -149,6 +149,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
         ...baseTheme.colors,
         ...customColors,
         primary: customColors.primary ?? baseTheme.colors.primary,
+        ...(themeMode === 'dark' && {
+          errorContainer: '#f38ba8', // Softer, more pastel version
+          onErrorContainer: '#313244',
+        }),
       },
     }
 

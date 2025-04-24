@@ -1,194 +1,728 @@
-import { MaterialIcons } from '@expo/vector-icons'
-import React, { useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Animated,
   Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
   PanResponder,
+  Platform,
+  Animated as RNAnimated,
   Text,
+  TextInput,
   TouchableOpacity,
+  UIManager,
   View,
 } from 'react-native'
+
+import BottomSheet from '@gorhom/bottom-sheet'
+import { Portal } from '@gorhom/portal'
+import { Calendar, ListTree, Plus, Tag, Trash2 } from 'lucide-react-native'
+import { Button, Checkbox } from 'react-native-paper'
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated'
+import { v4 as uuid } from 'uuid'
+
+// Internal hooks imports
 import { useBottomSheet } from '../../hooks/useBottomSheet'
+import { useFormType } from '../../hooks/useFormType'
+import { useKeyboard } from '../../hooks/useKeyboard'
+import { useTaskForm } from '../../hooks/useTaskForm'
+import { useTasks } from '../../hooks/useTasks'
 import { useTheme } from '../../hooks/useTheme'
+
+// Internal types and utilities
+import { Task } from '../../types'
+import { SubTask } from '../../types/task.type'
 import { dueDateRender } from '../../utils/dueDateRender'
-import { Chip } from '../Chip'
-import { taskDetailsStyles } from './styles'
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window')
-const MIN_HEIGHT = SCREEN_HEIGHT * 0.3 // Initial height: 30% of screen
-const MAX_HEIGHT = SCREEN_HEIGHT * 0.9 // Max height: 90% of screen
+// Styles import
+import { detailsStyles, subtaskStyles } from './styles'
 
-export const TaskDetailsSheet = ({}) => {
+/**
+ * TaskItem subcomponent - Renders individual subtask items
+ */
+interface TaskItemProps {
+  task: SubTask
+  onToggleComplete: (id: string) => void
+  onTextChange: (id: string, text: string) => void
+  onKeyPress: (e: any, id: string) => void
+  onDelete: (id: string) => void
+  inputRef: (id: string, ref: TextInput | null) => void
+  panResponder: any
+  anim: RNAnimated.Value
+  theme: any
+  styles: any
+}
+
+const TaskItem = memo(
+  ({
+    task,
+    onToggleComplete,
+    onTextChange,
+    onKeyPress,
+    onDelete,
+    inputRef,
+    panResponder,
+    anim,
+    theme,
+    styles,
+  }: TaskItemProps) => {
+    // State to control mount animations
+    const [isItemMounted, setIsItemMounted] = useState(false)
+
+    useEffect(() => {
+      const timer = setTimeout(() => setIsItemMounted(true), 200)
+      return () => clearTimeout(timer)
+    }, [])
+
+    return (
+      <View style={styles.taskContainer}>
+        {isItemMounted && (
+          <View style={[styles.deleteBackground]}>
+            <Trash2
+              size={20}
+              color={theme.colors.onError}
+            />
+          </View>
+        )}
+        <RNAnimated.View
+          style={[styles.foreground, { transform: [{ translateX: anim }] }]}
+          {...panResponder?.panHandlers}
+        >
+          <View
+            style={[styles.taskRow, task.completed && styles.completedTaskRow]}
+          >
+            <Checkbox
+              status={task.completed ? 'checked' : 'unchecked'}
+              onPress={() => onToggleComplete(task.id)}
+              color={theme.colors.primary}
+              uncheckedColor={theme.colors.outlineVariant}
+            />
+            <TextInput
+              ref={(ref) => inputRef(task.id, ref)}
+              style={[styles.taskInput, task.completed && styles.completedTask]}
+              value={task.text}
+              onChangeText={(text) => onTextChange(task.id, text)}
+              onKeyPress={(e) => onKeyPress(e, task.id)}
+              placeholder="Task item..."
+              placeholderTextColor={theme.colors.outline}
+              editable={!task.completed}
+            />
+          </View>
+        </RNAnimated.View>
+      </View>
+    )
+  },
+  (prevProps, nextProps) => {
+    // Optimization: only re-render when these props change
+    return (
+      prevProps.task.id === nextProps.task.id &&
+      prevProps.task.text === nextProps.task.text &&
+      prevProps.task.completed === nextProps.task.completed &&
+      prevProps.anim === nextProps.anim
+    )
+  },
+)
+
+/**
+ * TaskDetailsSheet - Shows details for a task
+ */
+export const TaskDetailsSheet: React.FC = () => {
+  //* ===== HOOKS =====
   const { theme } = useTheme()
-  const styles = useMemo(() => taskDetailsStyles(theme), [theme])
-  const { isVisible, data, hideBottomSheet } = useBottomSheet()
-  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current
-  const lastPosition = useRef(SCREEN_HEIGHT) // Track last resting position
+  const { data, hideBottomSheet, showBottomSheet } = useBottomSheet()
+  const { setFormType } = useFormType()
+  const { resetCurrentTask, updateCurrentTask } = useTaskForm()
+  const { tasks, updateTask } = useTasks()
+  const { keyboardVisible } = useKeyboard()
 
-  // Animate the sheet when visibility changes
+  //* ===== MEMOIZED VALUES =====
+  const styles = useMemo(() => detailsStyles(theme), [theme])
+  const subStyles = useMemo(() => subtaskStyles(theme), [theme])
+  const snapPoints = useMemo(() => ['24%', '56%'], [])
+
+  //* ===== DATA STATE =====
+  // Only display task details if we have a task in data
+  if (!data?.task) {
+    return null
+  }
+
+  const item = data.task
+  const [localTasks, setLocalTasks] = useState<SubTask[]>([])
+
+  //* ===== UI STATE =====
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isAddingSubTask, setIsAddingSubTask] = useState(false)
+  const [newTaskText, setNewTaskText] = useState('')
+  const [showNewTaskInput, setShowNewTaskInput] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  //* ===== REFS =====
+  const bottomSheetRef = useRef<BottomSheet>(null)
+  const inputRef = useRef<TextInput>(null)
+  const taskInputRefs = useRef<{ [key: string]: TextInput | null }>({})
+  const swipeAnimMap = useRef<{ [key: string]: RNAnimated.Value }>({})
+  const initialItemIdRef = useRef<string | null>(null)
+  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  //* ===== CONSTANTS =====
+  const screenWidth = Dimensions.get('window').width
+  const m3Easing = Easing.bezier(0.4, 0, 0, 1)
+
+  //* ===== ANIMATIONS =====
+  const fixedContentY = useSharedValue(20)
+  const fixedContentOpacity = useSharedValue(0)
+  const expandedContentY = useSharedValue(20)
+  const expandedContentOpacity = useSharedValue(0)
+
+  const fixedContentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: fixedContentY.value }],
+    opacity: fixedContentOpacity.value,
+    width: '100%',
+    paddingHorizontal: 16,
+  }))
+
+  const expandedContentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: expandedContentY.value }],
+    opacity: expandedContentOpacity.value,
+    width: '100%',
+    height: 264,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  }))
+
+  //* ===== EFFECTS =====
+
+  // Enable layout animations for Android
   useEffect(() => {
-    if (isVisible) {
-      Animated.spring(translateY, {
-        toValue: SCREEN_HEIGHT - MIN_HEIGHT, // Slide up to 30% height
-        useNativeDriver: true,
-        tension: 50, // Controls animation speed
-        friction: 7, // Controls bounce
-      }).start(() => {
-        lastPosition.current = SCREEN_HEIGHT - MIN_HEIGHT
-      })
-    } else {
-      Animated.spring(translateY, {
-        toValue: SCREEN_HEIGHT, // Slide off-screen
-        useNativeDriver: true,
-      }).start(() => {
-        lastPosition.current = SCREEN_HEIGHT
-      })
+    if (
+      Platform.OS === 'android' &&
+      UIManager.setLayoutAnimationEnabledExperimental
+    ) {
+      UIManager.setLayoutAnimationEnabledExperimental(true)
     }
-  }, [isVisible])
+  }, [])
 
-  // Handle drag gestures
-  const panResponder = PanResponder.create({
-    // Only respond to significant vertical drags
-    onMoveShouldSetPanResponder: (_, gestureState) =>
-      Math.abs(gestureState.dy) > 5,
+  // Load subtasks when task changes
+  useEffect(() => {
+    if (data?.task?.subTasks && localTasks.length === 0) {
+      setLocalTasks(data.task.subTasks || [])
+    }
+  }, [data?.task?.id])
 
-    // Update position while dragging
-    onPanResponderMove: (_, gestureState) => {
-      const newY = lastPosition.current + gestureState.dy
-      translateY.setValue(
-        Math.max(SCREEN_HEIGHT - MAX_HEIGHT, Math.min(SCREEN_HEIGHT, newY)),
-      )
+  // Handle adding new subtasks
+  useEffect(() => {
+    if (isAddingSubTask) {
+      setShowNewTaskInput(true)
+      const focusTimer = setTimeout(() => inputRef.current?.focus(), 200)
+      setIsAddingSubTask(false)
+      return () => clearTimeout(focusTimer)
+    }
+  }, [isAddingSubTask])
+
+  // Handle keyboard visibility changes
+  useEffect(() => {
+    if (!keyboardVisible) {
+      inputRef.current?.blur()
+      setShowNewTaskInput(false)
+      Object.values(taskInputRefs.current).forEach((input) => input?.blur())
+    }
+  }, [keyboardVisible])
+
+  // Handle animation when item changes
+  useEffect(() => {
+    if (
+      item &&
+      (!initialItemIdRef.current || initialItemIdRef.current !== item.id)
+    ) {
+      initialItemIdRef.current = item.id
+      fixedContentY.value = 20
+      fixedContentOpacity.value = 0
+
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current)
+      }
+
+      animationTimeoutRef.current = setTimeout(() => {
+        fixedContentY.value = withTiming(0, { duration: 800, easing: m3Easing })
+        fixedContentOpacity.value = withTiming(1, {
+          duration: 800,
+          easing: m3Easing,
+        })
+      }, 100)
+    }
+
+    setFormType('task')
+    updateCurrentTask(item as Task)
+
+    return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current)
+      }
+    }
+  }, [item?.id])
+
+  //* ===== CALLBACKS =====
+
+  // Handle sheet index changes
+  const handleSheetChanges = (index: number) => {
+    if (index === -1) {
+      hideBottomSheet()
+    } else {
+      if (index === 0) {
+        setIsExpanded(false)
+        saveSubTasks()
+        expandedContentY.value = withTiming(20, {
+          duration: 200,
+          easing: m3Easing,
+        })
+        expandedContentOpacity.value = withTiming(0, {
+          duration: 180,
+          easing: m3Easing,
+        })
+      } else {
+        setIsExpanded(true)
+        expandedContentY.value = withDelay(
+          50,
+          withTiming(0, { duration: 250, easing: m3Easing }),
+        )
+        expandedContentOpacity.value = withDelay(
+          50,
+          withTiming(1, { duration: 250, easing: m3Easing }),
+        )
+      }
+    }
+  }
+
+  // Save subtasks to the parent task
+  const saveSubTasks = useCallback(() => {
+    if (data?.task?.id) {
+      const updatedTask: Task = {
+        ...data.task,
+        subTasks: localTasks,
+      }
+      updateTask(updatedTask)
+    }
+  }, [data?.task, localTasks, updateTask])
+
+  // Toggle completion status for tasks
+  const handleToggleComplete = useCallback(
+    (itemId: string, completed: boolean, completedAt: string) => {
+      const task = tasks.find((t: Task) => t.id === itemId)
+      if (task) {
+        const updatedTask = {
+          ...task,
+          completed,
+          completedAt: completed ? completedAt : undefined,
+        }
+        updateTask(updatedTask)
+      }
     },
+    [tasks, updateTask],
+  )
 
-    // Snap to position when drag ends
-    onPanResponderRelease: (_, gestureState) => {
-      const currentY = lastPosition.current + gestureState.dy
-      const state =
-        lastPosition.current === SCREEN_HEIGHT - MAX_HEIGHT
-          ? 'expanded'
-          : lastPosition.current === SCREEN_HEIGHT - MIN_HEIGHT
-            ? 'minimized'
-            : 'closed' // Assuming it starts in one of these states
+  //* ===== SUBTASK MANAGEMENT =====
 
-      const DRAG_THRESHOLD = 100 // Pixels to drag to change state
+  // Add new subtask
+  const addTask = () => {
+    if (newTaskText.trim() === '') return
 
-      if (state === 'expanded') {
-        if (gestureState.dy > DRAG_THRESHOLD) {
-          // Dragged down more than 100px, snap to minimized
-          Animated.spring(translateY, {
-            toValue: SCREEN_HEIGHT - MIN_HEIGHT,
-            useNativeDriver: true,
-          }).start(() => {
-            lastPosition.current = SCREEN_HEIGHT - MIN_HEIGHT
-          })
-        } else {
-          // Snap back to expanded (includes small drags or drags up)
-          Animated.spring(translateY, {
-            toValue: SCREEN_HEIGHT - MAX_HEIGHT,
-            useNativeDriver: true,
-          }).start(() => {
-            lastPosition.current = SCREEN_HEIGHT - MAX_HEIGHT
-          })
+    const newSubTask: SubTask = {
+      id: uuid(),
+      text: newTaskText.trim(),
+      completed: false,
+    }
+
+    const updatedTasks = [newSubTask, ...localTasks]
+    setLocalTasks(updatedTasks)
+
+    if (data?.task?.id) {
+      const updatedTask: Task = { ...data.task, subTasks: updatedTasks }
+      updateTask(updatedTask)
+    }
+
+    setNewTaskText('')
+    setShowNewTaskInput(true)
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  // Toggle subtask completion
+  const toggleSubTaskCompleted = useCallback(
+    (id: string) => {
+      const updatedTasks = localTasks.map((task) => {
+        if (task.id === id) {
+          return {
+            ...task,
+            completed: !task.completed,
+          }
         }
-      } else if (state === 'minimized') {
-        if (gestureState.dy < -DRAG_THRESHOLD) {
-          // Dragged up more than 100px, snap to expanded
-          Animated.spring(translateY, {
-            toValue: SCREEN_HEIGHT - MAX_HEIGHT,
-            useNativeDriver: true,
-          }).start(() => {
-            lastPosition.current = SCREEN_HEIGHT - MAX_HEIGHT
-          })
-        } else if (gestureState.dy > DRAG_THRESHOLD) {
-          // Dragged down more than 100px, snap to closed
-          hideBottomSheet()
-          Animated.spring(translateY, {
-            toValue: SCREEN_HEIGHT,
-            useNativeDriver: true,
-          }).start(() => {
-            lastPosition.current = SCREEN_HEIGHT
-          })
-        } else {
-          // Snap back to minimized
-          Animated.spring(translateY, {
-            toValue: SCREEN_HEIGHT - MIN_HEIGHT,
-            useNativeDriver: true,
-          }).start(() => {
-            lastPosition.current = SCREEN_HEIGHT - MIN_HEIGHT
-          })
+        return task
+      })
+
+      setLocalTasks(updatedTasks)
+
+      if (data?.task?.id) {
+        const updatedTask: Task = {
+          ...data.task,
+          subTasks: updatedTasks,
         }
-      } else if (state === 'closed') {
-        if (gestureState.dy < -DRAG_THRESHOLD) {
-          // Dragged up more than 100px, snap to minimized
-          Animated.spring(translateY, {
-            toValue: SCREEN_HEIGHT - MIN_HEIGHT,
-            useNativeDriver: true,
-          }).start(() => {
-            lastPosition.current = SCREEN_HEIGHT - MIN_HEIGHT
-          })
-        } else {
-          // Snap back to closed
-          hideBottomSheet()
-          Animated.spring(translateY, {
-            toValue: SCREEN_HEIGHT,
-            useNativeDriver: true,
-          }).start(() => {
-            lastPosition.current = SCREEN_HEIGHT
-          })
+        updateTask(updatedTask)
+      }
+    },
+    [localTasks, data?.task, updateTask],
+  )
+
+  // Update subtask text
+  const updateSubTaskText = useCallback(
+    (id: string, text: string) => {
+      const updatedTasks = localTasks.map((task) =>
+        task.id === id ? { ...task, text } : task,
+      )
+      setLocalTasks(updatedTasks)
+
+      if (data?.task?.id) {
+        const updatedTask: Task = { ...data.task, subTasks: updatedTasks }
+        updateTask(updatedTask)
+      }
+    },
+    [localTasks, data?.task, updateTask],
+  )
+
+  // Delete subtask
+  const deleteSubTask = useCallback(
+    (id: string) => {
+      const updatedTasks = localTasks.filter((task) => task.id !== id)
+      setLocalTasks(updatedTasks)
+
+      if (data?.task?.id) {
+        const updatedTask: Task = { ...data.task, subTasks: updatedTasks }
+        updateTask(updatedTask)
+      }
+
+      if (swipeAnimMap.current[id]) swipeAnimMap.current[id].setValue(0)
+    },
+    [localTasks, data?.task, updateTask],
+  )
+
+  // Handle backspace key
+  const handleKeyPress = useCallback(
+    (e: any, id: string) => {
+      if (e.nativeEvent.key === 'Backspace') {
+        const task = localTasks.find((t) => t.id === id)
+        if (task && task.text === '') {
+          deleteSubTask(id)
+          e.preventDefault?.()
         }
       }
     },
-  })
+    [localTasks, deleteSubTask],
+  )
 
-  // Don't render anything if not visible
-  if (!isVisible) return null
+  // Store TextInput refs
+  const setTaskInputRef = useCallback((id: string, ref: TextInput | null) => {
+    taskInputRefs.current[id] = ref
+  }, [])
+
+  // Create pan responder for swipe gestures
+  const createPanResponder = useCallback(
+    (taskId: string) => {
+      if (!swipeAnimMap.current[taskId]) {
+        swipeAnimMap.current[taskId] = new RNAnimated.Value(0)
+      }
+      const anim = swipeAnimMap.current[taskId]
+
+      return PanResponder.create({
+        onMoveShouldSetPanResponder: (evt, gestureState) => {
+          if (isDragging) return false
+          const { dx, dy } = gestureState
+          return Math.abs(dx) > Math.abs(dy) * 2 && Math.abs(dx) > 20
+        },
+        onPanResponderGrant: () => {
+          let _value = 0
+          anim.addListener(({ value }) => (_value = value))
+          anim.setOffset(_value)
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          if (gestureState.dx < 0) anim.setValue(gestureState.dx)
+        },
+        onPanResponderRelease: (evt, gestureState) => {
+          anim.flattenOffset()
+          if (gestureState.dx < -screenWidth * 0.35) {
+            RNAnimated.timing(anim, {
+              toValue: -screenWidth,
+              duration: 200,
+              useNativeDriver: true,
+            }).start(() => deleteSubTask(taskId))
+          } else {
+            RNAnimated.timing(anim, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }).start()
+          }
+        },
+      })
+    },
+    [deleteSubTask, isDragging, screenWidth],
+  )
+
+  //* ===== RENDER FUNCTIONS =====
+
+  // Render the title section
+  const renderTitle = () => (
+    <View style={styles.titleContainer}>
+      <Checkbox
+        status={item?.completed ? 'checked' : 'unchecked'}
+        onPress={() => {
+          handleToggleComplete(
+            item.id,
+            !item.completed,
+            new Date().toISOString(),
+          )
+        }}
+        color={theme.colors.primary}
+        uncheckedColor={theme.colors.outlineVariant}
+      />
+      <Text style={styles.title}>{item?.title}</Text>
+    </View>
+  )
 
   return (
-    <View style={styles.container}>
-      <Animated.View
-        style={[
-          styles.sheet,
-          {
-            transform: [{ translateY }],
-          },
-        ]}
-        {...panResponder.panHandlers}
+    <Portal>
+      <BottomSheet
+        index={0}
+        ref={bottomSheetRef}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        enableDynamicSizing={false}
+        enableOverDrag={false}
+        onChange={handleSheetChanges}
+        onClose={saveSubTasks}
+        animateOnMount
+        backgroundStyle={{ backgroundColor: theme.colors.surface }}
+        handleIndicatorStyle={{ backgroundColor: theme.colors.outlineVariant }}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
       >
-        {/* Drag handle */}
-        <View style={styles.handle} />
-
-        {/* Close button */}
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={hideBottomSheet}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         >
-          <MaterialIcons
-            name="close"
-            size={24}
-            color={theme.colors.onSurface}
-          />
-        </TouchableOpacity>
+          {/* Header */}
+          <View style={[styles.header, { height: 16 }]}>
+            <TouchableOpacity>{/* Header content */}</TouchableOpacity>
+          </View>
 
-        {/* Task details */}
-        <Text style={styles.title}>{data?.task?.title}</Text>
-        <View style={styles.tagViewer}>
-          {data?.task?.tags?.map((tag) => (
-            <Chip
-              key={tag.id}
-              tag={tag}
-              onPress={() => {}}
-              onDelete={() => {}}
-              isDeletable={false}
-            />
-          ))}
-        </View>
-        <Text style={styles.reminderText}>
-          {data?.task ? dueDateRender(data.task, styles) : 'No due date'}
-        </Text>
-        <Text style={styles.description}>
-          {data?.task?.description || 'No description available'}
-        </Text>
-      </Animated.View>
-    </View>
+          <View style={styles.container}>
+            {/* Fixed content (visible in both collapsed and expanded states) */}
+            <Animated.View style={fixedContentStyle}>
+              {renderTitle()}
+              <View style={styles.preview}>
+                <View style={{ height: 56 }}>
+                  <Text style={styles.description}>
+                    {item.description || 'No description available'}
+                  </Text>
+                </View>
+                <View style={styles.bottomCollapsed}>
+                  {dueDateRender(data.task, styles, theme)}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingTop: 4,
+                    }}
+                  >
+                    {localTasks && localTasks.length > 0 && (
+                      <>
+                        <ListTree
+                          size={18}
+                          color={
+                            localTasks.filter((st) => st.completed).length ===
+                            localTasks.length
+                              ? theme.colors.primary
+                              : theme.colors.outline
+                          }
+                        />
+                        <Text
+                          style={{
+                            marginLeft: 4,
+                            fontWeight: 500,
+                            color:
+                              localTasks.filter((st) => st.completed).length ===
+                              localTasks.length
+                                ? theme.colors.primary
+                                : theme.colors.outline,
+                          }}
+                        >
+                          {`${localTasks.filter((st) => st.completed).length || 0}/${
+                            localTasks.length || 0
+                          }`}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* Expanded content */}
+            {isExpanded && (
+              <Animated.View style={expandedContentStyle}>
+                <View style={{ marginTop: 16 }}>
+                  <View style={subStyles.container}>
+                    {/* New subtask input */}
+                    {showNewTaskInput && (
+                      <View style={{ height: 48, marginVertical: 4 }}>
+                        <Animated.View style={[subStyles.taskRow]}>
+                          <TextInput
+                            key={item.id}
+                            ref={inputRef}
+                            style={subStyles.taskInput}
+                            value={newTaskText}
+                            onChangeText={setNewTaskText}
+                            placeholder="New subtask..."
+                            placeholderTextColor={theme.colors.outline}
+                            returnKeyType="done"
+                            onSubmitEditing={addTask}
+                            autoFocus
+                          />
+                          <TouchableOpacity
+                            onPress={addTask}
+                            style={subStyles.deleteButton}
+                            disabled={!newTaskText.trim()}
+                          >
+                            {newTaskText.trim() ? (
+                              <Trash2
+                                size={16}
+                                color={theme.colors.primary}
+                              />
+                            ) : null}
+                          </TouchableOpacity>
+                        </Animated.View>
+                      </View>
+                    )}
+
+                    {/* Empty state message */}
+                    {localTasks.length === 0 && !showNewTaskInput && (
+                      <Text style={subStyles.noTasksText}>
+                        No subtasks added yet.
+                      </Text>
+                    )}
+
+                    {/* Subtasks list */}
+                    <FlatList
+                      data={localTasks}
+                      keyExtractor={(item) => item.id}
+                      style={{
+                        height: 180,
+                        paddingBottom: keyboardVisible ? 120 : 80,
+                        marginBottom: keyboardVisible ? 20 : 0,
+                      }}
+                      renderItem={({ item, index }) => {
+                        const panResponder = createPanResponder(item.id)
+                        const anim =
+                          swipeAnimMap.current[item.id] ||
+                          new RNAnimated.Value(0)
+                        const isLastItem = index === localTasks.length - 1
+
+                        return (
+                          <>
+                            <TaskItem
+                              task={item}
+                              onToggleComplete={toggleSubTaskCompleted}
+                              onTextChange={updateSubTaskText}
+                              onKeyPress={handleKeyPress}
+                              onDelete={deleteSubTask}
+                              inputRef={setTaskInputRef}
+                              panResponder={panResponder}
+                              anim={anim}
+                              theme={theme}
+                              styles={subStyles}
+                            />
+                            {!isLastItem && !item.completed && (
+                              <View style={subStyles.divider} />
+                            )}
+                          </>
+                        )
+                      }}
+                    />
+                  </View>
+
+                  {/* Bottom actions area */}
+                  <View style={styles.bottomTask}>
+                    {/* Add subtask button */}
+                    <Button
+                      compact
+                      icon={() => (
+                        <Plus
+                          size={18}
+                          color={theme.colors.primary}
+                        />
+                      )}
+                      onPress={() => setIsAddingSubTask(true)}
+                    >
+                      Add Subtask
+                    </Button>
+
+                    {/* Action icons */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        width: '20%',
+                      }}
+                    >
+                      {/* Calendar/Date icon */}
+                      <TouchableOpacity
+                        onPress={() => {
+                          showBottomSheet('calendar', {
+                            task: data.task,
+                            returnTo: 'taskDetails',
+                          })
+                        }}
+                      >
+                        <Calendar
+                          size={20}
+                          color={
+                            item.scheduledAt
+                              ? theme.colors.primary
+                              : theme.colors.outline
+                          }
+                        />
+                      </TouchableOpacity>
+
+                      {/* Tags icon */}
+                      <TouchableOpacity
+                        onPress={() => {
+                          showBottomSheet('tagSuggestions', {
+                            task: data.task,
+                            returnTo: 'taskDetails',
+                          })
+                        }}
+                      >
+                        <Tag
+                          size={20}
+                          color={
+                            item.tags && item.tags.length > 0
+                              ? theme.colors.primary
+                              : theme.colors.outline
+                          }
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </Animated.View>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </BottomSheet>
+    </Portal>
   )
 }

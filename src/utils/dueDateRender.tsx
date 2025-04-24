@@ -6,61 +6,116 @@ import {
   format,
 } from 'date-fns'
 import { Text } from 'react-native'
+import { MD3Theme } from 'react-native-paper'
 import { Task } from '../types'
 
-export const dueDateRender = (task: Task, styles: any) => {
-  if (!task.scheduledAt) return null
+export function dueDateRender(
+  task?: Task,
+  styles?: any,
+  theme?: MD3Theme,
+): JSX.Element | null {
+  if (!task || !task.scheduledAt) return null
+
+  // When a task is marked as all-day, scheduledAt will be a date-only string (YYYY-MM-DD)
+  const scheduledDate =
+    task.isAllDay && !task.scheduledAt.includes('T')
+      ? new Date(
+          parseInt(task.scheduledAt.slice(0, 4), 10),
+          parseInt(task.scheduledAt.slice(5, 7), 10) - 1,
+          parseInt(task.scheduledAt.slice(8, 10), 10),
+        )
+      : new Date(task.scheduledAt)
 
   const now = new Date()
-  const reminderDate = new Date(task.scheduledAt)
-  const diffMinutes = differenceInMinutes(reminderDate, now)
-  const diffHours = differenceInHours(reminderDate, now)
-  const diffDays = differenceInDays(reminderDate, now)
-  const diffYears = differenceInYears(reminderDate, now)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const scheduledDay = new Date(
+    scheduledDate.getFullYear(),
+    scheduledDate.getMonth(),
+    scheduledDate.getDate(),
+  )
+  const diffMinutes = differenceInMinutes(scheduledDate, now) // Compare with current time for timed tasks
+  const diffDays = differenceInDays(scheduledDay, today)
 
-  if (diffMinutes < 0) return <Text style={styles.reminderText}>Past due</Text>
-
-  if (diffMinutes < 60) {
+  // Handle all-day tasks
+  if (task.isAllDay) {
+    if (diffDays < 0)
+      return (
+        <Text
+          style={[
+            styles.reminderText,
+            theme && {
+              backgroundColor: theme.colors.errorContainer,
+              color: theme.colors.onErrorContainer,
+            },
+          ]}
+        >
+          Past Due
+        </Text>
+      )
+    if (diffDays === 0) return <Text style={styles.reminderText}>Today</Text>
+    if (diffDays === 1) return <Text style={styles.reminderText}>Tomorrow</Text>
     return (
-      <Text
-        style={styles.reminderText}
-      >{`In ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`}</Text>
+      <Text style={styles.reminderText}>
+        {format(scheduledDate, 'MMM d, yyyy')}
+      </Text>
     )
   }
 
-  if (diffHours < 24) {
-    const remainingMinutes = diffMinutes % 60
+  // Handle non-all-day (timed) tasks
+  if (diffMinutes < 0) {
     return (
       <Text
-        style={styles.reminderText}
-      >{`In ${diffHours}h ${remainingMinutes}m`}</Text>
+        style={[
+          styles.reminderText,
+          theme && {
+            backgroundColor: theme.colors.errorContainer,
+            color: theme.colors.onErrorContainer,
+          },
+        ]}
+      >
+        Past due
+      </Text>
+    )
+  }
+
+  // Check if the task is scheduled for today
+  if (scheduledDay.getTime() === today.getTime()) {
+    const timeStr = format(scheduledDate, 'h:mm a')
+    return <Text style={styles.reminderText}>Today at {timeStr}</Text>
+  }
+
+  if (diffMinutes < 60) {
+    return (
+      <Text style={styles.reminderText}>
+        {`In ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`}
+      </Text>
+    )
+  }
+
+  if (differenceInHours(scheduledDate, now) < 24) {
+    const diffHours = differenceInHours(scheduledDate, now)
+    const remainingMinutes = diffMinutes % 60
+    return (
+      <Text style={styles.reminderText}>
+        {`In ${diffHours}h ${remainingMinutes}m`}
+      </Text>
     )
   }
 
   if (diffDays < 7) {
-    if (diffDays === 0) return <Text style={styles.reminderText}>Today</Text>
     if (diffDays === 1) return <Text style={styles.reminderText}>Tomorrow</Text>
     return <Text style={styles.reminderText}>{`In ${diffDays} days`}</Text>
   }
 
-  if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7)
+  if (differenceInYears(scheduledDate, now) < 1) {
     return (
-      <Text
-        style={styles.reminderText}
-      >{`In ${weeks} week${weeks !== 1 ? 's' : ''}`}</Text>
-    )
-  }
-
-  if (diffYears < 1) {
-    return (
-      <Text style={styles.reminderText}>{format(reminderDate, 'MMM d')}</Text>
+      <Text style={styles.reminderText}>{format(scheduledDate, 'MMM d')}</Text>
     )
   }
 
   return (
     <Text style={styles.reminderText}>
-      {format(reminderDate, 'MMM d, yyyy')}
+      {format(scheduledDate, 'MMM d, yyyy')}
     </Text>
   )
 }

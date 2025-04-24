@@ -6,9 +6,9 @@ import { useTasks } from './useTasks'
 
 const initialTaskState: Task = {
   id: '',
-  icon: '',
   title: '',
   completed: false,
+  isTask: true,
 }
 
 export const useTaskFormManager = () => {
@@ -21,7 +21,6 @@ export const useTaskFormManager = () => {
       const taskToCreate = {
         ...initialTaskState,
         id: uuid(),
-        icon: currentTask.icon || 'list',
         title: currentTask.title.trim(),
         completed: false,
         scheduledAt: currentTask.scheduledAt,

@@ -1,4 +1,4 @@
-import { MaterialIcons } from '@expo/vector-icons'
+import { X } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { TouchableOpacity } from 'react-native'
 import { Text } from 'react-native-paper'
@@ -35,8 +35,7 @@ export const Chip: React.FC<{
           disabled={disabled}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <MaterialIcons
-            name="close"
+          <X
             size={18}
             color={theme.colors.onSurface}
           />

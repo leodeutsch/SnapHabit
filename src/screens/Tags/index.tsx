@@ -1,4 +1,4 @@
-import { MaterialIcons } from '@expo/vector-icons'
+import { LayoutGrid, LayoutList, Pencil, Trash, X } from 'lucide-react-native'
 import React, { useMemo, useRef, useState } from 'react'
 import {
   Alert,
@@ -6,13 +6,12 @@ import {
   Dimensions,
   Easing,
   FlatList,
-  Keyboard,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native'
-import { Chip } from '../../components/Chip'
+import { Chip } from 'react-native-paper'
 import { useBottomSheet } from '../../hooks/useBottomSheet'
 import { useTags } from '../../hooks/useTags'
 import { useTheme } from '../../hooks/useTheme'
@@ -31,8 +30,6 @@ export const TagsScreen = () => {
   const [isListView, setIsListView] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const listViewAnim = useRef(new Animated.Value(0)).current
-  const translateYAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current
-  const backdropOpacity = useRef(new Animated.Value(0)).current
 
   const handleDeleteTag = (tag: Tag) => {
     Alert.alert(
@@ -63,43 +60,6 @@ export const TagsScreen = () => {
     }),
   }
 
-  const showBottomSheetAnimated = () => {
-    Animated.parallel([
-      Animated.timing(translateYAnim, {
-        toValue: 0,
-        duration: DURATION_LONG2 * 0.4,
-        easing: EMPHASIZED_EASING,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: 1,
-        duration: DURATION_LONG2 * 0.6,
-        easing: EMPHASIZED_EASING,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }
-
-  const hideBottomSheetAnimated = () => {
-    Animated.parallel([
-      Animated.timing(translateYAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: DURATION_LONG2 * 0.4,
-        easing: EMPHASIZED_EASING,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: 0,
-        duration: DURATION_LONG2 * 0.6,
-        easing: EMPHASIZED_EASING,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      hideBottomSheet()
-    })
-    Keyboard.dismiss()
-  }
-
   const animateViewChange = (toListView: boolean) => {
     if (isAnimating) return
 
@@ -119,9 +79,12 @@ export const TagsScreen = () => {
     <View style={styles.tagItem}>
       <Text style={styles.tagName}>{item.name}</Text>
       <View style={styles.tagActions}>
-        <TouchableOpacity onPress={() => {}}>
-          <MaterialIcons
-            name="edit"
+        <TouchableOpacity
+          onPress={() =>
+            showBottomSheet('tag', { tag: item, source: 'TagsScreen' })
+          }
+        >
+          <Pencil
             size={18}
             color={theme.colors.primary}
           />
@@ -130,8 +93,7 @@ export const TagsScreen = () => {
           style={{ marginLeft: 24 }}
           onPress={() => handleDeleteTag(item)}
         >
-          <MaterialIcons
-            name="delete"
+          <Trash
             size={18}
             color={theme.colors.error}
           />
@@ -145,18 +107,30 @@ export const TagsScreen = () => {
       {tags.map((tag) => (
         <Chip
           key={tag.id}
-          tag={tag}
-          onDelete={() => !isAnimating && handleDeleteTag(tag)}
-          onPress={() => {}}
-        />
+          style={styles.tagChip}
+          textStyle={styles.tagChipText}
+          onPress={() => showBottomSheet('tag', { tag, source: 'TagsScreen' })}
+          onClose={() => !isAnimating && handleDeleteTag(tag)}
+          closeIcon={() => (
+            <X
+              size={16}
+              color={theme.colors.onSecondaryContainer}
+            />
+          )}
+        >
+          {tag.name}
+        </Chip>
       ))}
-      <TouchableOpacity
+      <Chip
+        mode="outlined"
+        onPress={() => showBottomSheet('tag', { source: 'TagsScreen' })}
         style={styles.addTagChip}
-        onPress={() => {}}
+        textStyle={styles.addTagChipText}
         disabled={isAnimating}
+        compact
       >
-        <Text style={styles.addTagChipText}>Add Tag</Text>
-      </TouchableOpacity>
+        Add Tag
+      </Chip>
     </ScrollView>
   )
 
@@ -168,11 +142,17 @@ export const TagsScreen = () => {
           onPress={() => animateViewChange(!isListView)}
           disabled={isAnimating}
         >
-          <MaterialIcons
-            name={isListView ? 'grid-view' : 'list'}
-            size={24}
-            color={theme.colors.onBackground}
-          />
+          {isListView ? (
+            <LayoutGrid
+              size={24}
+              color={theme.colors.onBackground}
+            />
+          ) : (
+            <LayoutList
+              size={24}
+              color={theme.colors.onBackground}
+            />
+          )}
         </TouchableOpacity>
       </View>
       <View style={styles.viewContainer}>

@@ -12,7 +12,6 @@ export type WeekDays =
 
 export interface Habit {
   id: string
-  // icon: string
   title: string
   description?: string
   reminders?: Reminder[]

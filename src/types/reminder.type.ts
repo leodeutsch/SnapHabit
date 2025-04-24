@@ -21,7 +21,10 @@ export type ReminderOption =
 
 export interface Reminder {
   id: string
-  type: ReminderOption
+  type?: ReminderOption
+  time?: string
+  repeat?: RepeatPattern
+  days?: WeekDays[]
   customValue?: number
   customUnit?: 'minutes' | 'hours' | 'days'
 }

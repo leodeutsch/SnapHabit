@@ -3,9 +3,10 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createStackNavigator } from '@react-navigation/stack'
 import { format } from 'date-fns'
 import {
-  Bolt,
-  CalendarClock,
-  CopyCheck,
+  CalendarRange,
+  Ellipsis,
+  ListTodo,
+  Search,
   SquareChartGantt,
 } from 'lucide-react-native'
 import React from 'react'
@@ -13,25 +14,47 @@ import { Animated, Pressable, Text, View } from 'react-native'
 import { IconButton } from 'react-native-paper'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { GlobalFAB } from '../components/GlobalFAB'
+import { SearchModal } from '../components/SearchModal'
+import { useFilter } from '../hooks/useFilterContent'
 import { useHabits } from '../hooks/useHabits'
+import { useSearch } from '../hooks/useSearch'
 import { useTasks } from '../hooks/useTasks'
 import { useTheme } from '../hooks/useTheme'
+import { AgendaScreen } from '../screens/Agenda'
 import { HabitsScreen } from '../screens/Habits'
 import { HomeScreen } from '../screens/Home'
 import { SettingsScreen } from '../screens/Settings'
-import { StatisticsScreen } from '../screens/Statistics'
 import { TagsScreen } from '../screens/Tags'
 import { TasksScreen } from '../screens/Tasks'
 
 const Tab = createBottomTabNavigator()
 const Stack = createStackNavigator()
 
-export const TabNavigation = () => {
+// Create a proper component for the Search screen
+// This prevents recreation on each render
+const EmptySearchScreen = () => <View />
+
+export const TabNavigation = ({ navigation, onRouteChange }: any) => {
   const { theme } = useTheme()
   const { tasks } = useTasks()
   const { habits } = useHabits()
+  const { isFilterVisible } = useFilter()
+  const { showSearch, isSearchVisible } = useSearch()
   const insets = useSafeAreaInsets()
   const [currentRoute, setCurrentRoute] = React.useState('Home')
+
+  // Pass currentRoute to parent via a ref
+  const currentRouteRef = React.useRef(currentRoute)
+  React.useEffect(() => {
+    currentRouteRef.current = currentRoute
+  }, [currentRoute])
+
+  // Update the parent component when route changes
+  React.useEffect(() => {
+    if (onRouteChange) {
+      onRouteChange(currentRoute)
+    }
+  }, [currentRoute, onRouteChange])
 
   return (
     <View style={{ flex: 1 }}>
@@ -41,10 +64,14 @@ export const TabNavigation = () => {
           tabBarHideOnKeyboard: true,
           tabBarShowLabel: false,
           tabBarStyle: {
-            backgroundColor: theme.colors.surface,
+            display: isSearchVisible || isFilterVisible ? 'none' : 'flex',
+            backgroundColor: 'transparent',
             borderTopColor: theme.colors.outline,
             height: '10%',
             borderTopWidth: 0,
+            elevation: 0,
+            shadowOpacity: 0,
+            shadowColor: theme.colors.background,
             position: 'absolute',
             bottom: 0,
             zIndex: 1,
@@ -52,13 +79,49 @@ export const TabNavigation = () => {
           },
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
-          tabBarButton: (props) => (
-            <TabButton
-              {...props}
-              theme={theme}
-            />
-          ),
+          tabBarButton: (props) => {
+            if (route.name === 'Search') {
+              return (
+                <Pressable
+                  {...props}
+                  onPress={() => {
+                    showSearch()
+                  }}
+                  style={{
+                    flex: 1,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    paddingVertical: 8,
+                  }}
+                  android_ripple={{
+                    color: theme.colors.primary + '8',
+                    borderless: false,
+                    radius: 24,
+                  }}
+                >
+                  {props.children}
+                </Pressable>
+              )
+            }
+            return (
+              <TabButton
+                {...props}
+                theme={theme}
+              />
+            )
+          },
           tabBarIcon: ({ focused, color }) => {
+            // Handle Search tab
+            if (route.name === 'Search') {
+              return (
+                <Search
+                  size={24}
+                  color={color}
+                />
+              )
+            }
+
+            // Existing tab icons logic
             if (route.name === 'Home') {
               const today = new Date()
 
@@ -74,28 +137,37 @@ export const TabNavigation = () => {
                 )
               })
 
-              // Count habits scheduled for today's weekday
+              // Get past due tasks
+              const pastDueTasks = tasks.filter((task) => {
+                if (!task.scheduledAt || task.completed) return false
+                const scheduledDate = new Date(task.scheduledAt)
+                return (
+                  scheduledDate < today &&
+                  !task.scheduledAt.startsWith(todayStr)
+                )
+              })
               const todayHabits = habits.filter((habit) => {
-                if (!habit.scheduledAt || !Array.isArray(habit.scheduledAt))
-                  return false
+                if (
+                  !habit.scheduledAt ||
+                  !Array.isArray(habit.scheduledAt) ||
+                  habit.scheduledAt.length === 0
+                ) {
+                  return true
+                }
 
-                // Get weekday name based on the screens/Home/index.tsx pattern
                 const weekdayName = format(today, 'EEEE')
-                // @ts-ignore
-                return habit.scheduledAt.includes(weekdayName)
+                return habit.scheduledAt.some((day) => day === weekdayName)
               })
 
-              const totalCount = todayTasks.length + todayHabits.length
+              const totalCount =
+                todayTasks.length + pastDueTasks.length + todayHabits.length
 
               return (
                 <View
                   style={{
                     width: 24,
                     height: 24,
-                    // backgroundColor: focused ? color : theme.colors.surface,
-                    // borderWidth: focused ? 0 : 1.6,
                     borderWidth: 2.4,
-                    // borderColor: theme.colors.outline,
                     borderColor: focused
                       ? theme.colors.primary
                       : theme.colors.outline,
@@ -121,9 +193,17 @@ export const TabNavigation = () => {
 
             let iconComponent
             switch (route.name) {
+              case 'Agenda':
+                iconComponent = ({ size, color }: any) => (
+                  <CalendarRange
+                    size={size}
+                    color={color}
+                  />
+                )
+                break
               case 'Tasks':
                 iconComponent = ({ size, color }: any) => (
-                  <CopyCheck
+                  <ListTodo
                     size={size}
                     color={color}
                   />
@@ -132,22 +212,6 @@ export const TabNavigation = () => {
               case 'Habits':
                 iconComponent = ({ size, color }: any) => (
                   <SquareChartGantt
-                    size={size}
-                    color={color}
-                  />
-                )
-                break
-              case 'Log':
-                iconComponent = ({ size, color }: any) => (
-                  <CalendarClock
-                    size={size}
-                    color={color}
-                  />
-                )
-                break
-              case 'Settings':
-                iconComponent = ({ size, color }: any) => (
-                  <Bolt
                     size={size}
                     color={color}
                   />
@@ -168,12 +232,44 @@ export const TabNavigation = () => {
           },
         })}
         screenListeners={({ route }) => ({
-          focus: () => setCurrentRoute(route.name),
+          focus: () => {
+            setCurrentRoute(route.name)
+          },
         })}
       >
         <Tab.Screen
           name="Home"
           component={HomeScreen}
+        />
+        <Tab.Screen
+          name="Agenda"
+          component={AgendaScreen}
+        />
+        {/* Fix: Use a named component instead of inline function */}
+        <Tab.Screen
+          name="Search"
+          component={EmptySearchScreen}
+          options={{
+            tabBarButton: (props) => (
+              <Pressable
+                {...props}
+                onPress={() => showSearch()}
+                style={{
+                  flex: 1,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  paddingVertical: 8,
+                }}
+                android_ripple={{
+                  color: theme.colors.primary + '8',
+                  borderless: false,
+                  radius: 24,
+                }}
+              >
+                {props.children}
+              </Pressable>
+            ),
+          }}
         />
         <Tab.Screen
           name="Tasks"
@@ -183,24 +279,19 @@ export const TabNavigation = () => {
           name="Habits"
           component={HabitsScreen}
         />
-        <Tab.Screen
-          name="Log"
-          component={StatisticsScreen}
-        />
-        <Tab.Screen
-          name="Settings"
-          component={SettingsScreen}
-        />
       </Tab.Navigator>
 
-      {/* Global FAB - will only show on non-Settings screens */}
-      {currentRoute !== 'Settings' && <GlobalFAB />}
+      <SearchModal />
+
+      {currentRoute === 'Home' && <GlobalFAB />}
     </View>
   )
 }
 
 export const Navigation = () => {
   const { theme } = useTheme()
+  // Reference to know which tab is active
+  const currentRouteRef = React.useRef('Home')
 
   return (
     <NavigationContainer
@@ -222,18 +313,60 @@ export const Navigation = () => {
         },
       }}
     >
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={({ navigation }) => ({
+          // Only show header when the current tab is 'Home'
+          headerShown: currentRouteRef.current === 'Home',
+          headerStyle: {
+            elevation: 0,
+            shadowOpacity: 0,
+            height: 2,
+          },
+          headerRight: () => (
+            <IconButton
+              icon={() => (
+                <Ellipsis
+                  size={24}
+                  color={theme.colors.onBackground}
+                />
+              )}
+              onPress={() => navigation.navigate('Settings')}
+            />
+          ),
+          headerTitle: () => null,
+          headerLeft: () => null,
+        })}
+      >
         <Stack.Screen
           name="MainTabs"
-          component={TabNavigation}
+          component={({ navigation, ...props }: any) => {
+            // Pass the ref to TabNavigation using this approach
+            const routeNameRef = React.useRef()
+
+            return (
+              <TabNavigation
+                {...props}
+                navigation={navigation}
+                routeNameRef={routeNameRef}
+                onRouteChange={(routeName: any) => {
+                  currentRouteRef.current = routeName
+                  navigation.setOptions({ headerShown: routeName === 'Home' })
+                }}
+              />
+            )
+          }}
         />
         <Stack.Screen
           name="Tags"
           component={TagsScreen}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
+          options={{
+            headerShown: false,
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -1,4 +1,4 @@
-import { Dimensions } from 'react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 import { MD3Theme } from 'react-native-paper'
 import { createThemedStyles } from '../../utils/themedStyle'
 
@@ -10,11 +10,28 @@ export const homeStyles = createThemedStyles((theme: MD3Theme) => ({
     paddingVertical: 16,
     backgroundColor: theme.colors.background,
   },
+  pullIndicator: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: theme.colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    zIndex: 5,
+  },
   header: {
     display: 'flex',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    // alignItems: 'center',
     marginTop: 16,
     marginBottom: 16,
     paddingHorizontal: 16,
@@ -41,14 +58,20 @@ export const homeStyles = createThemedStyles((theme: MD3Theme) => ({
     color: theme.colors.onBackground,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   sectionHeader: {
     fontSize: 20,
     fontWeight: '600',
     color: theme.colors.primary,
+    paddingHorizontal: 4,
+  },
+  sectionHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingTop: 8,
     backgroundColor: theme.colors.background,
   },
   emptyContainer: {

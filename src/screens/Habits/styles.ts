@@ -14,7 +14,7 @@ export const themedStyles = createThemedStyles((theme: MD3Theme) => ({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 16,
-    marginBottom: 48,
+    marginBottom: 16,
     paddingHorizontal: 16,
   },
   title: {
@@ -26,5 +26,34 @@ export const themedStyles = createThemedStyles((theme: MD3Theme) => ({
   text: {
     color: theme.colors.onBackground,
     fontSize: 18,
+  },
+  section: {
+    paddingVertical: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: '40%',
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginVertical: 20,
+    color: theme.colors.outline,
+    fontSize: 16,
+  },
+  // New styles for filter functionality
+  activeFiltersContainer: {
+    backgroundColor: theme.colors.primaryContainer + '40',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  activeFiltersText: {
+    color: theme.colors.onSurface,
+    fontSize: 14,
+    textAlign: 'center',
   },
 }))

@@ -8,30 +8,7 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window')
 export const calendarSheetStyles = createThemedStyles((theme: MD3Theme) => ({
   container: {
     backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     paddingHorizontal: 8,
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: SCREEN_HEIGHT * 0.7,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  dragHandle: {
-    width: 36,
-    height: 5,
-    backgroundColor: theme.colors.outline,
-    borderRadius: 2.5,
-    alignSelf: 'center',
-    marginBottom: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -45,7 +22,7 @@ export const calendarSheetStyles = createThemedStyles((theme: MD3Theme) => ({
   },
   weekDays: {
     paddingHorizontal: 8,
-    marginBottom: 24,
+    marginBottom: 8,
   },
   weekDaysContainer: {
     paddingHorizontal: 2,
@@ -54,9 +31,9 @@ export const calendarSheetStyles = createThemedStyles((theme: MD3Theme) => ({
   weekDayChip: {
     borderRadius: 24,
     marginHorizontal: 2,
+    backgroundColor: theme.colors.secondaryContainer,
   },
   weekDayChipText: {
-    color: theme.colors.onSurface,
     fontFamily: FONTS.REGULAR,
   },
   timePickerContainer: {
@@ -71,12 +48,15 @@ export const calendarSheetStyles = createThemedStyles((theme: MD3Theme) => ({
     fontFamily: FONTS.REGULAR,
     color: theme.colors.onSurface,
   },
-
   timePickerButtonText: {
     fontSize: 16,
     fontFamily: FONTS.REGULAR,
     color: theme.colors.onSurface,
     marginRight: 8,
+  },
+  bottomSheetContent: {
+    flex: 1,
+    padding: 16,
   },
   disabledButton: {
     backgroundColor: theme.colors.surface,
@@ -179,10 +159,13 @@ export const calendarSheetStyles = createThemedStyles((theme: MD3Theme) => ({
     marginTop: 24,
   },
   reminderItem: {
-    backgroundColor: theme.colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    height: 64,
     marginHorizontal: 16,
     marginVertical: 4,
-    borderRadius: 8,
+    borderRadius: 32,
   },
   noRemindersText: {
     color: theme.colors.outline,
@@ -195,12 +178,10 @@ export const calendarSheetStyles = createThemedStyles((theme: MD3Theme) => ({
     marginTop: 16,
   },
   repeatOption: {
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.outline,
     marginBottom: 8,
-    backgroundColor: theme.colors.surface,
+    marginHorizontal: 'auto',
+    width: '88%',
+    height: 36,
   },
   headerTitle: {
     fontSize: 18,

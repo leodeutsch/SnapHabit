@@ -10,39 +10,21 @@ import { CalendarSheet } from '../components/CalendarSheet'
 import { Form } from '../components/Form'
 import { HabitDaysSheet } from '../components/HabitDaysSheet'
 import { HabitDetailsSheet } from '../components/HabitDetailsSheet'
-import { TagSuggestionsModal } from '../components/TagSuggestionsModal'
+import { TagSheet } from '../components/TagManageSheet'
+import { TagSuggestionsModal } from '../components/TagSuggestionsSheet'
 import { TaskDetailsSheet } from '../components/TaskDetailsSheet'
+import { useHabitForm } from '../hooks/useHabitForm'
+import { useTaskForm } from '../hooks/useTaskForm'
 import { useTheme } from '../hooks/useTheme'
-import { Habit, Tag, Task } from '../types'
+import {
+  BottomSheetContent,
+  BottomSheetContextType,
+  BottomSheetData,
+} from '../types'
 
 const EMPHASIZED_EASING = Easing.bezier(0.2, 0, 0, 1)
 const DURATION_LONG2 = 500
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
-
-type BottomSheetContent =
-  | 'addTask'
-  | 'calendar'
-  | 'tag'
-  | 'tagSuggestions'
-  | 'taskDetails'
-  | 'addHabit'
-  | 'habitDay'
-  | 'habitDetails'
-  | null
-
-interface BottomSheetData {
-  tag?: Tag
-  task?: Task
-  habit?: Habit
-}
-
-interface BottomSheetContextType {
-  isVisible: boolean
-  content: BottomSheetContent
-  data: BottomSheetData | null
-  showBottomSheet: (content: BottomSheetContent, data?: BottomSheetData) => void
-  hideBottomSheet: () => void
-}
 
 export const BottomSheetContext = createContext<
   BottomSheetContextType | undefined
@@ -52,6 +34,8 @@ export const BottomSheetProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { theme } = useTheme()
+  const { resetCurrentTask } = useTaskForm()
+  const { resetCurrentHabit } = useHabitForm()
   const [isVisible, setIsVisible] = useState(false)
   const [content, setContent] = useState<BottomSheetContent>(null)
   const [data, setData] = useState<BottomSheetData | null>(null)
@@ -149,6 +133,14 @@ export const BottomSheetProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [isVisible])
 
+  // Reset the current task or habit when the bottom sheet is closed
+  useEffect(() => {
+    if (!isVisible && content === null) {
+      resetCurrentTask()
+      resetCurrentHabit()
+    }
+  }, [isVisible, content])
+
   // Render the appropriate content for the bottom sheet
   const renderBottomSheetContent = () => {
     switch (content) {
@@ -157,12 +149,14 @@ export const BottomSheetProvider: React.FC<{ children: React.ReactNode }> = ({
         return <Form />
       case 'taskDetails':
         return <TaskDetailsSheet />
-      case 'calendar':
-        return <CalendarSheet />
-      case 'tagSuggestions':
-        return <TagSuggestionsModal />
       case 'habitDetails':
         return <HabitDetailsSheet />
+      case 'calendar':
+        return <CalendarSheet />
+      case 'tag':
+        return <TagSheet />
+      case 'tagSuggestions':
+        return <TagSuggestionsModal />
       case 'habitDay':
         return <HabitDaysSheet />
       default:

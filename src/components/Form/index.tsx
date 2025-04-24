@@ -1,5 +1,4 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons'
-import { ChevronUp } from 'lucide-react-native'
+import { CalendarFold, ChevronUp, Tag } from 'lucide-react-native'
 import React, { useEffect, useMemo, useRef } from 'react'
 import {
   Animated,
@@ -132,7 +131,8 @@ export const Form: React.FC = () => {
           description: currentTask.description,
           // Only include non-empty subtasks
           subTasks:
-            currentTask.subTasks?.filter((task) => task.trim() !== '') || [],
+            currentTask.subTasks?.filter((task) => task.text.trim() !== '') ||
+            [],
         }
         addTask(taskToCreate)
         resetCurrentTask()
@@ -180,9 +180,6 @@ export const Form: React.FC = () => {
       : currentSchedule && typeof currentSchedule === 'string'
         ? formatRelativeDate(currentSchedule)
         : 'When'
-
-  const scheduleIcon =
-    formType === 'task' ? 'insert-invitation' : 'calendar-month'
 
   return (
     <KeyboardAvoidingView
@@ -264,9 +261,8 @@ export const Form: React.FC = () => {
                 style={styles.iconButton}
                 onPress={openCalendar}
               >
-                <MaterialIcons
-                  name={scheduleIcon}
-                  size={20}
+                <CalendarFold
+                  size={16}
                   color={
                     currentSchedule
                       ? theme.colors.primary
@@ -289,17 +285,15 @@ export const Form: React.FC = () => {
                 style={styles.iconButton}
                 onPress={openTagSuggestions}
               >
-                <MaterialIcons
-                  name={
-                    (currentTags?.length || 0) > 0
-                      ? 'label-outline'
-                      : 'new-label'
-                  }
-                  size={20}
+                <Tag
+                  size={16}
                   color={
                     (currentTags?.length || 0) > 0
                       ? theme.colors.primary
                       : theme.colors.onSurfaceVariant
+                  }
+                  fill={
+                    currentTags?.length || 0 > 0 ? theme.colors.primary : 'none'
                   }
                 />
               </TouchableOpacity>

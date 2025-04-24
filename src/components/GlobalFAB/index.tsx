@@ -1,5 +1,4 @@
-import { useNavigation } from '@react-navigation/native'
-import { CalendarPlus, Hash, ListPlus, Minus, Plus } from 'lucide-react-native'
+import { CalendarPlus, ListPlus, Minus, Plus } from 'lucide-react-native'
 import React, { useEffect, useState } from 'react'
 import { FAB } from 'react-native-paper'
 import { useBottomSheet } from '../../hooks/useBottomSheet'
@@ -14,7 +13,6 @@ export const GlobalFAB: React.FC = () => {
   const { showBottomSheet, isVisible } = useBottomSheet()
   const { keyboardVisible } = useKeyboard()
   const { setFormType } = useFormType()
-  const navigation = useNavigation<any>()
 
   // States
   const [hideFab, setHideFab] = useState(false)
@@ -50,13 +48,6 @@ export const GlobalFAB: React.FC = () => {
     const iconSize = 24
 
     switch (iconName) {
-      case 'tags':
-        return (
-          <Hash
-            size={iconSize}
-            color={color}
-          />
-        )
       case 'calendar-plus':
         return (
           <CalendarPlus
@@ -99,13 +90,6 @@ export const GlobalFAB: React.FC = () => {
       }}
       fabStyle={[styles.fab]}
       actions={[
-        {
-          icon: ({ color }) => renderIcon('tags', color),
-          label: 'Tags',
-          onPress: () => navigation.navigate('Tags'),
-          color: theme.colors.onPrimary,
-          style: styles.fab,
-        },
         {
           icon: ({ color }) => renderIcon('calendar-plus', color),
           label: 'Create Habit',
